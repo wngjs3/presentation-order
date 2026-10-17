@@ -11,14 +11,17 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",sans-serif; }
-  main { max-width:560px; margin:0 auto; padding:32px 16px 64px; }
+  main { max-width:1000px; margin:0 auto; padding:32px 16px 64px; display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:24px; align-items:start; }
+  .side { position:sticky; top:16px; max-height:calc(100vh - 32px); overflow-y:auto; }
+  .side h2 { font-size:15px; color:var(--muted); font-weight:600; margin:0 0 10px; }
+  @media (max-width:760px) { main { grid-template-columns:1fr; } .side { position:static; max-height:none; } }
   h1 { font-size:24px; margin:0 0 20px; }
   textarea, input[type=number] { padding:12px; border-radius:12px; border:1px solid var(--done); background:var(--card); color:var(--text); font:inherit; }
   textarea { width:100%; min-height:120px; resize:vertical; }
   input[type=number] { width:80px; padding:8px 10px; }
   .opts { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin:12px 0; color:var(--muted); font-size:14px; }
   .opts label { display:flex; align-items:center; gap:6px; }
-  .row { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 28px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 24px; }
   button { font:inherit; border:0; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#fff; }
   button.ghost { background:var(--done); color:var(--text); }
   .now { background:var(--card); border-radius:16px; padding:24px; text-align:center; margin-bottom:16px; }
@@ -38,6 +41,7 @@
 </head>
 <body>
 <main>
+  <div>
   <h1>🎤 발표 순서</h1>
   <textarea id="input" placeholder="이름을 쉼표나 줄바꿈으로 구분해서 입력&#10;예) 철수, 영희, 민수"></textarea>
   <div class="opts">
@@ -49,7 +53,9 @@
     <button id="inorder" class="ghost">입력한 순서대로</button>
     <button id="reset" class="ghost">초기화</button>
   </div>
-  <div id="out"></div>
+  <div id="now"></div>
+  </div>
+  <aside class="side"><h2>발표 순서</h2><div id="list"></div></aside>
 </main>
 <script>
   const $ = id => document.getElementById(id);
@@ -94,15 +100,15 @@
 
   function render() {
     save();
-    if (!queue.length) { stopTimer(); $('out').innerHTML = '<div class="empty">순서를 정해주세요 (또는 모두 발표 완료 🎉)</div>'; return; }
-    $('out').innerHTML = `
+    if (!queue.length) { stopTimer(); $('now').innerHTML = '<div class="empty">순서를 정해주세요 (또는 모두 발표 완료 🎉)</div>'; $('list').innerHTML = ''; return; }
+    $('now').innerHTML = `
       <div class="now"><small>지금 발표</small><div class="name">${esc(queue[0])}</div>
         <div id="timer" class="timer"></div>
         <div class="row">
           <button id="toggle" class="ghost" onclick="toggle()"></button>
           <button onclick="done(0)">발표 완료 → 다음</button>
-        </div></div>
-      <ol>${queue.map((n, i) => `<li><span class="n">${i + 1}</span>
+        </div></div>`;
+    $('list').innerHTML = `<ol>${queue.map((n, i) => `<li><span class="n">${i + 1}</span>
         <label><input type="checkbox" onchange="done(${i})">${esc(n)}</label></li>`).join('')}</ol>`;
     drawTimer();
   }
