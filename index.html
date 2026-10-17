@@ -36,6 +36,11 @@
   li .n { color:var(--muted); width:24px; text-align:right; }
   li label { flex:1; display:flex; align-items:center; gap:12px; cursor:pointer; }
   li input { width:20px; height:20px; }
+  .prompt { background:var(--card); border-radius:16px; padding:20px 24px; outline:none; }
+  .prompt h3 { margin:0 0 6px; font-size:20px; }
+  .prompt p { margin:0 0 14px; color:var(--muted); font-size:14px; }
+  .prompt ol { display:block; list-style:decimal; padding-left:22px; font-size:17px; line-height:1.7; }
+  .prompt ol li { display:list-item; background:none; padding:0; }
   .empty { text-align:center; color:var(--muted); padding:24px; }
 </style>
 </head>
@@ -54,6 +59,16 @@
     <button id="reset" class="ghost">초기화</button>
   </div>
   <div id="now"></div>
+  <section id="prompt" class="prompt" contenteditable="true" spellcheck="false">
+    <h3>네트워킹 세션</h3>
+    <p>이 중에 2~3개 정도 골라서 이야기 해주세요! (질문에 없는 내용 답하셔도 괜찮음)</p>
+    <ol>
+      <li>간단히 자기 소개 (닉네임, 직무, 나를 잘 나타내는 무언가)</li>
+      <li>나의 목표는? 어떤 실천을 하고 있는지?</li>
+      <li>행복하게 &amp; 건강하게 성장하는 삶을 위해 나누고 싶은 점이 있다면?</li>
+      <li>요새 고민이 있다면?</li>
+    </ol>
+  </section>
   </div>
   <aside class="side"><h2>발표 순서</h2><div id="list"></div></aside>
 </main>
@@ -136,6 +151,8 @@
   $('reset').onclick = () => { $('input').value = ''; setQueue([]); };
   $('minutes').oninput = () => { save(); drawTimer(); };
   $('fixFirst').onchange = save;
+  try { const saved = localStorage.getItem('prompt'); if (saved) $('prompt').innerHTML = saved; } catch {}
+  $('prompt').oninput = () => { try { localStorage.setItem('prompt', $('prompt').innerHTML); } catch {} };
   render();
 </script>
 </body>
