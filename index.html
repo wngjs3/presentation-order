@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>발표 순서</title>
 <style>
-  :root { --bg:#f6f6f4; --card:#fff; --text:#1d1d1f; --muted:#8a8a8e; --accent:#2f6fed; --done:#e9e9ec; }
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1d1d1f; --muted:#8a8a8e; --accent:#2f6fed; --done:#e9e9ec; --over:#e5484d; --warn:#f5a524; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#121214; --card:#1d1d20; --text:#f2f2f4; --muted:#8a8a8e; --accent:#5b8cff; --done:#2a2a2e; }
   }
@@ -13,13 +13,21 @@
   body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",sans-serif; }
   main { max-width:560px; margin:0 auto; padding:32px 16px 64px; }
   h1 { font-size:24px; margin:0 0 20px; }
-  textarea { width:100%; min-height:140px; padding:12px; border-radius:12px; border:1px solid var(--done); background:var(--card); color:var(--text); font:inherit; resize:vertical; }
-  .row { display:flex; gap:8px; margin:12px 0 28px; }
+  textarea, input[type=number] { padding:12px; border-radius:12px; border:1px solid var(--done); background:var(--card); color:var(--text); font:inherit; }
+  textarea { width:100%; min-height:120px; resize:vertical; }
+  input[type=number] { width:80px; padding:8px 10px; }
+  .opts { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin:12px 0; color:var(--muted); font-size:14px; }
+  .opts label { display:flex; align-items:center; gap:6px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 28px; }
   button { font:inherit; border:0; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#fff; }
   button.ghost { background:var(--done); color:var(--text); }
   .now { background:var(--card); border-radius:16px; padding:24px; text-align:center; margin-bottom:16px; }
   .now small { color:var(--muted); }
-  .now .name { font-size:40px; font-weight:700; margin:8px 0 16px; }
+  .now .name { font-size:40px; font-weight:700; margin:8px 0 4px; }
+  .timer { font-size:56px; font-variant-numeric:tabular-nums; font-weight:600; margin:4px 0 16px; }
+  .timer.warn { color:var(--warn); }
+  .timer.over { color:var(--over); }
+  .now .row { justify-content:center; margin:0; }
   ol { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px; }
   li { display:flex; align-items:center; gap:12px; background:var(--card); border-radius:12px; padding:12px 14px; }
   li .n { color:var(--muted); width:24px; text-align:right; }
@@ -30,38 +38,98 @@
 </head>
 <body>
 <main>
-  <h1>🎤 발표 순서 뽑기</h1>
-  <textarea id="input" placeholder="이름을 줄바꿈이나 쉼표로 구분해서 입력"></textarea>
+  <h1>🎤 발표 순서</h1>
+  <textarea id="input" placeholder="이름을 쉼표나 줄바꿈으로 구분해서 입력&#10;예) 철수, 영희, 민수"></textarea>
+  <div class="opts">
+    <label><input type="checkbox" id="fixFirst"> 첫 번째 사람 고정</label>
+    <label>1인당 <input type="number" id="minutes" min="0.5" step="0.5" value="5"> 분</label>
+  </div>
   <div class="row">
-    <button id="shuffle">랜덤 순서 뽑기</button>
+    <button id="shuffle">랜덤 순서</button>
+    <button id="inorder" class="ghost">입력한 순서대로</button>
     <button id="reset" class="ghost">초기화</button>
   </div>
   <div id="out"></div>
 </main>
 <script>
   const $ = id => document.getElementById(id);
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   let queue = [];
-  try { queue = JSON.parse(localStorage.getItem('queue')) || []; $('input').value = localStorage.getItem('names') || ''; } catch {}
-  const save = () => { try { localStorage.setItem('queue', JSON.stringify(queue)); localStorage.setItem('names', $('input').value); } catch {} };
+  // 타이머: startedAt 있으면 진행 중, elapsed는 일시정지 전까지 누적(ms)
+  let startedAt = null, elapsed = 0, tick = null;
+
+  try {
+    queue = JSON.parse(localStorage.getItem('queue')) || [];
+    $('input').value = localStorage.getItem('names') || '';
+    $('minutes').value = localStorage.getItem('minutes') || 5;
+    $('fixFirst').checked = localStorage.getItem('fixFirst') === '1';
+  } catch {}
+  const save = () => { try {
+    localStorage.setItem('queue', JSON.stringify(queue));
+    localStorage.setItem('names', $('input').value);
+    localStorage.setItem('minutes', $('minutes').value);
+    localStorage.setItem('fixFirst', $('fixFirst').checked ? '1' : '0');
+  } catch {} };
+
+  const names = () => $('input').value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+  const limit = () => Math.max(0, parseFloat($('minutes').value) || 0) * 60000;
+  const running = () => startedAt !== null;
+  const spent = () => elapsed + (running() ? Date.now() - startedAt : 0);
+
+  function fmt(ms) {
+    const s = Math.floor(Math.abs(ms) / 1000);
+    return (ms < 0 ? '+' : '') + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function drawTimer() {
+    const el = $('timer'); if (!el) return;
+    const left = limit() - spent();
+    // 남은 시간 표시, 초과하면 +로 초과 시간
+    el.textContent = fmt(left < 0 ? left : left + 999);
+    el.className = 'timer' + (left < 0 ? ' over' : left <= 60000 ? ' warn' : '');
+    $('toggle').textContent = running() ? '일시정지' : spent() ? '계속' : '시작 ▶';
+  }
+
+  function stopTimer() { clearInterval(tick); tick = null; startedAt = null; elapsed = 0; }
 
   function render() {
     save();
-    if (!queue.length) { $('out').innerHTML = '<div class="empty">순서를 뽑아주세요 (또는 모두 발표 완료 🎉)</div>'; return; }
-    const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    if (!queue.length) { stopTimer(); $('out').innerHTML = '<div class="empty">순서를 정해주세요 (또는 모두 발표 완료 🎉)</div>'; return; }
     $('out').innerHTML = `
       <div class="now"><small>지금 발표</small><div class="name">${esc(queue[0])}</div>
-        <button onclick="done(0)">발표 완료 ✓</button></div>
+        <div id="timer" class="timer"></div>
+        <div class="row">
+          <button id="toggle" class="ghost" onclick="toggle()"></button>
+          <button onclick="done(0)">발표 완료 → 다음</button>
+        </div></div>
       <ol>${queue.map((n, i) => `<li><span class="n">${i + 1}</span>
         <label><input type="checkbox" onchange="done(${i})">${esc(n)}</label></li>`).join('')}</ol>`;
+    drawTimer();
   }
-  window.done = i => { queue.splice(i, 1); render(); };
+
+  window.toggle = () => {
+    if (running()) { elapsed = spent(); startedAt = null; clearInterval(tick); tick = null; }
+    else { startedAt = Date.now(); tick = setInterval(drawTimer, 250); }
+    drawTimer();
+  };
+  // 현재 발표자가 끝나면 타이머 리셋, 다음 사람은 직접 시작
+  window.done = i => { if (i === 0) stopTimer(); queue.splice(i, 1); render(); };
+
+  function setQueue(list) { stopTimer(); queue = list; render(); }
 
   $('shuffle').onclick = () => {
-    queue = $('input').value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-    for (let i = queue.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
-    render();
+    const list = names();
+    const start = $('fixFirst').checked ? 1 : 0;
+    for (let i = list.length - 1; i > start; i--) {
+      const j = start + Math.floor(Math.random() * (i - start + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    setQueue(list);
   };
-  $('reset').onclick = () => { queue = []; $('input').value = ''; render(); };
+  $('inorder').onclick = () => setQueue(names());
+  $('reset').onclick = () => { $('input').value = ''; setQueue([]); };
+  $('minutes').oninput = () => { save(); drawTimer(); };
+  $('fixFirst').onchange = save;
   render();
 </script>
 </body>
